@@ -5,22 +5,48 @@ tmp=`mktemp`
 email="$2"
 
 yesterday=`date --date='1 day ago' +'%Y-%m-%d'`
+tomorrow=`date --date='+ 1 day' +'%Y-%m-%d'`
 today=`date +'%Y-%m-%d'`
+
+function header() {
+	printf "\n\n# $1\n\n" >> $tmp
+}
+
+function undo_task() {
+	cut -d ' ' -f 3-
+}
 
 if [ ! -f "$todo" ] || [ ! -f "$done" ]; then
 	echo "Could not find todo.txt/done.txt at $1"
 fi
 
-# 1. move daily tasks from done back to todo
-grep '@daily' "$todo" "$done" | cut -d ' ' -f 3- | uniq | sed 's/^/(A) /' >> "$todo"
+# move daily tasks from done back to todo
+grep '@daily' "$todo" "$done" | undo_task | uniq | sed 's/^/(A) /' >> "$todo"
 
-# 2. create a list of tasks that were done yesterday
-printf "\n# Tasks Completed Yesterday:\n\n" >> "$tmp"
-grep "^x $yesterday " "$todo" "$done" | cut -d ' ' -f 3- | sed 's/^/✓ /' >> "$tmp"
+# Set today's calendar tasks to (A) priority
+sed -i "/^[^x(].*due:$today/s/^/(A) /" "$todo"
 
-# 3. create a list of tasks to be done today
-printf "\n\n# Today's Tasks (todo: currently this does not increment (B) tasks to (A)\n\n" >> "$tmp"
+# Prepend random book-note
+record=`cat $1/booknotes/* | dos2unix | awk -v RS='' '/[Ll]oc(ation)? [0-9]/ { print NR }'| shuf -n1`
+cat $1/booknotes/* | dos2unix | awk -v RS='' -v ORS='\n\n' "/[Ll]oc(ation)? [0-9]/ && NR==$record { print \$0; exit }" >> "$tmp"
+
+# create a list of tasks that were done yesterday
+header "Tasks Completed Yesterday"
+grep "^x $yesterday " "$todo" "$done" | undo_task | sed 's/^/✓ /' >> "$tmp"
+
+# create a list of tasks to be done today
+header "Today's Tasks"
 grep -v 'x ' "$todo" | grep -e '(A)' -e "$today" | sort | sed 's/^/- /' >> "$tmp"
+
+if [ -f "$1/*conflict*.txt" ]; then
+	header "Possible Conflicts Found"
+	ls "$1/*conflict*.txt" >> "$tmp"
+fi
+
+# Tomorrow's due tasks
+header "Tasks Due Tomorrow"
+grep -v 'x ' "$todo" | grep -e "$tomorrow" | sort | sed 's/^/- /' >> "$tmp"
 
 cat $tmp | sed 's/\r$//' | mail -s "Todid $today" -r max@maxjmartin.com $email
 rm $tmp
+
