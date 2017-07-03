@@ -26,9 +26,14 @@ grep '@daily' "$todo" "$done" | undo_task | uniq | sed 's/^/(A) /' >> "$todo"
 # Set today's calendar tasks to (A) priority
 sed -i "/^[^x(].*due:$today/s/^/(A) /" "$todo"
 
-# Prepend random book-note
-record=`cat $1/booknotes/* | dos2unix | awk -v RS='' '/[Ll]oc(ation)? [0-9]/ { print NR }'| shuf -n1`
-cat $1/booknotes/* | dos2unix | awk -v RS='' -v ORS='\n\n' "/[Ll]oc(ation)? [0-9]/ && NR==$record { print \$0; exit }" >> "$tmp"
+# Find random book-note file
+bn=`find $1/booknotes -type f|shuf -n1`
+printf "From: " >> "$tmp"
+# filename
+echo "$bn" | awk -F '[./]' '{print $(NF-1)}'|sed 's/-/ /g' >> "$tmp"
+record=`cat $bn | dos2unix | tail -n+5 | awk -v RS='' '/^[^>#=\*]/ {print NR}' | shuf -n1`
+# random note from the file
+cat $bn | dos2unix | awk -v RS='' -v ORS='\n' "/^[^>#=\*]/ && NR==$record { print \$0; exit }" >> "$tmp"
 
 # create a list of tasks that were done yesterday
 header "Tasks Completed Yesterday"
